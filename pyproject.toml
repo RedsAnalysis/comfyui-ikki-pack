@@ -1,11 +1,18 @@
 [project]
 name = "comfyui-ikki-pack"
 version = "0.1.0"
-description = "Add your description here"
+description = "A collection of custom ComfyUI nodes by Ikkyu."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.urls]
+Repository = "https://github.com/RedsAnalysis/comfyui-ikki-pack"
+
 [build-system]
 requires = ["uv_build>=0.11.32,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.comfy]
+PublisherId = "ikkyu"
+DisplayName = "ikki Pack"
