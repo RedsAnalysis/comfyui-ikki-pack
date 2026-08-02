@@ -120,4 +120,4 @@ If there's a repetitive task in ComfyUI that feels like it should be easier, let
 
 ## License
 
-MIT
+GNU
