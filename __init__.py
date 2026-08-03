@@ -17,6 +17,7 @@ from py.mask_editor import IkkiMaskEditor
 from py.detailer_ksampler import IkkiDetailerKSampler
 from py.composite_back import IkkiCompositeBack
 from py.image_comparer import IkkiImageComparer
+from py.color_matching import IkkiColorMatching
 
 NODE_CLASS_MAPPINGS = {
     "IkkiLoadAndCrop": IkkiLoadAndCrop,
@@ -30,6 +31,7 @@ NODE_CLASS_MAPPINGS = {
     "IkkiDetailerKSampler": IkkiDetailerKSampler,
     "IkkiCompositeBack": IkkiCompositeBack,
     "IkkiImageComparer": IkkiImageComparer,
+    "IkkiColorMatching": IkkiColorMatching,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -42,8 +44,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "IkkiDetailerProcessor": "Detailer Processor ⌨️",
     "IkkiMaskEditor": "Visual Mask Editor 🎨",
     "IkkiDetailerKSampler": "Detailer KSampler ⚡",
-    "IkkiCompositeBack": "Composite Back 🖼️",
+    "IkkiCompositeBack": "Composite Back 🕸️",
     "IkkiImageComparer": "Image Comparer ⚖️",
+    "IkkiColorMatching": "Color Matching Studio 🖼️",
 }
 
 WEB_DIRECTORY = "./web"

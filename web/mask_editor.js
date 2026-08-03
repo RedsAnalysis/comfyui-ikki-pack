@@ -6,9 +6,14 @@ app.registerExtension({
     async nodeCreated(node) {
         if (node.comfyClass !== "IkkiMaskEditor") return;
 
-        node.size = [440, 580];
+        // Expanded node default dimensions
+        node.size = [500, 680];
         node.latestImgUrl = null;
         node.latestMaskUrl = null;
+
+        // Mask Lock State & Active Color State
+        let isLocked = false;
+        let currentColor = "#ff2828"; // Default Neon Red
 
         // Undo / Redo History Stack
         const undoStack = [];
@@ -42,35 +47,115 @@ app.registerExtension({
         viewToolbar.appendChild(btnOverlay);
         viewToolbar.appendChild(btnBW);
 
-        // 2. BRUSH & ACTION TOOLBAR
+        // 2. BRUSH & COLOR TOOLBAR
         const drawToolbar = document.createElement("div");
         drawToolbar.style.display = "flex";
         drawToolbar.style.flexWrap = "wrap";
-        drawToolbar.style.gap = "4px";
+        drawToolbar.style.gap = "6px";
         drawToolbar.style.justifyContent = "center";
+        drawToolbar.style.alignItems = "center";
         drawToolbar.style.width = "100%";
 
-        const btnAdd = createBtn("⚪ Add Mask Brush", "#2a9d8f", true);
-        const btnRemove = createBtn("⬛ Remove Mask Brush", "#e76f51", false);
+        const btnAdd = createBtn("⚪ Add Mask", "#2a9d8f", true);
+        const btnRemove = createBtn("⬛ Remove Mask", "#e76f51", false);
         const btnUndo = createBtn("↩️ Undo", "#6c757d", false);
         const btnRedo = createBtn("↪️ Redo", "#6c757d", false);
-        const btnReset = createBtn("🔄 Reset Base", "#e63946", false);
 
-        // BIG DISTINCT GREEN PRIMARY BUTTON
-        const btnSend = createBtn("🚀 Send & Queue Inpaint", "#10b981", false);
-        btnSend.style.width = "100%";              // Spans full toolbar width
-        btnSend.style.padding = "8px 12px";        // Bigger touch target
-        btnSend.style.fontSize = "12px";          // Larger font size
-        btnSend.style.fontWeight = "bold";         // Bold text
-        btnSend.style.marginTop = "2px";
-        btnSend.style.boxShadow = "0 2px 5px rgba(0, 0, 0, 0.4)"; // Subtle drop shadow
+        // --- SLEEK COLLAPSIBLE COLOR DOT PICKER ---
+        const colorPickerContainer = document.createElement("div");
+        colorPickerContainer.style.display = "flex";
+        colorPickerContainer.style.alignItems = "center";
+        colorPickerContainer.style.gap = "6px";
+        colorPickerContainer.style.position = "relative";
+
+        const mainColorDot = document.createElement("div");
+        mainColorDot.style.width = "18px";
+        mainColorDot.style.height = "18px";
+        mainColorDot.style.borderRadius = "50%";
+        mainColorDot.style.backgroundColor = currentColor;
+        mainColorDot.style.border = "2px solid #ffffff";
+        mainColorDot.style.cursor = "pointer";
+        mainColorDot.style.boxShadow = "0 0 4px rgba(0,0,0,0.6)";
+        mainColorDot.title = "Click to change mask color";
+
+        const palettePopup = document.createElement("div");
+        palettePopup.style.display = "none";
+        palettePopup.style.flexDirection = "row";
+        palettePopup.style.gap = "5px";
+        palettePopup.style.backgroundColor = "#24242b";
+        palettePopup.style.padding = "4px 6px";
+        palettePopup.style.borderRadius = "12px";
+        palettePopup.style.border = "1px solid #4a4e69";
+        palettePopup.style.boxShadow = "0 4px 10px rgba(0,0,0,0.8)";
+        palettePopup.style.zIndex = "100";
+
+        const presetColors = ["#ff2828", "#39ff14", "#00e5ff", "#ffe600", "#ff007f", "#ffffff"];
+
+        presetColors.forEach(col => {
+            const dot = document.createElement("div");
+            dot.style.width = "15px";
+            dot.style.height = "15px";
+            dot.style.borderRadius = "50%";
+            dot.style.backgroundColor = col;
+            dot.style.cursor = "pointer";
+            dot.style.border = "1px solid rgba(255,255,255,0.7)";
+            dot.style.transition = "transform 0.1s";
+
+            dot.onmouseover = () => { dot.style.transform = "scale(1.2)"; };
+            dot.onmouseout = () => { dot.style.transform = "scale(1)"; };
+
+            dot.onclick = (e) => {
+                e.stopPropagation();
+                currentColor = col;
+                mainColorDot.style.backgroundColor = col;
+                palettePopup.style.display = "none";
+                if (node.latestMaskUrl && !isLocked) {
+                    renderDetectorMask(latestMaskImgObj);
+                }
+            };
+
+            palettePopup.appendChild(dot);
+        });
+
+        mainColorDot.onclick = (e) => {
+            e.stopPropagation();
+            palettePopup.style.display = palettePopup.style.display === "none" ? "flex" : "none";
+        };
+
+        // Close palette if clicking outside
+        document.addEventListener("click", () => {
+            palettePopup.style.display = "none";
+        });
+
+        colorPickerContainer.appendChild(mainColorDot);
+        colorPickerContainer.appendChild(palettePopup);
 
         drawToolbar.appendChild(btnAdd);
         drawToolbar.appendChild(btnRemove);
+        drawToolbar.appendChild(colorPickerContainer); // Inserted next to brush mode
         drawToolbar.appendChild(btnUndo);
         drawToolbar.appendChild(btnRedo);
-        drawToolbar.appendChild(btnReset);
-        drawToolbar.appendChild(btnSend); // Appended once at bottom
+
+        // 3. MAIN CONTROL TOOLBAR (LOCK & SYNC)
+        const controlToolbar = document.createElement("div");
+        controlToolbar.style.display = "flex";
+        controlToolbar.style.gap = "6px";
+        controlToolbar.style.width = "100%";
+        controlToolbar.style.justifyContent = "space-between";
+        controlToolbar.style.marginTop = "2px";
+
+        const btnLock = createBtn("🔓 Unlocked", "#e76f51", false);
+        btnLock.style.width = "49%";
+        btnLock.style.padding = "6px 8px";
+        btnLock.style.fontWeight = "bold";
+
+        const btnSync = createBtn("🔄 Sync Detector", "#4a4e69", false);
+        btnSync.style.width = "49%";
+        btnSync.style.padding = "6px 8px";
+        btnSync.style.fontWeight = "bold";
+
+        controlToolbar.appendChild(btnLock);
+        controlToolbar.appendChild(btnSync);
 
         // Sliders
         const slidersDiv = document.createElement("div");
@@ -79,17 +164,17 @@ app.registerExtension({
         slidersDiv.style.width = "100%";
         slidersDiv.style.justifyContent = "space-between";
 
-        const sizeControl = createSlider("Brush Size:", 1, 100, 25);
+        const sizeControl = createSlider("Brush Size:", 1, 100, 15);
         const opacityControl = createSlider("Mask Alpha:", 10, 100, 70);
 
         slidersDiv.appendChild(sizeControl.container);
         slidersDiv.appendChild(opacityControl.container);
 
-        // 3. CANVAS VIEWPORT & STACK
+        // 4. CANVAS VIEWPORT & STACK
         const canvasViewport = document.createElement("div");
         canvasViewport.style.position = "relative";
-        canvasViewport.style.width = "400px";
-        canvasViewport.style.height = "400px";
+        canvasViewport.style.width = "460px";
+        canvasViewport.style.height = "460px";
         canvasViewport.style.backgroundColor = "#000";
         canvasViewport.style.borderRadius = "6px";
         canvasViewport.style.overflow = "hidden";
@@ -100,14 +185,14 @@ app.registerExtension({
         canvasWrapper.style.top = "0";
         canvasWrapper.style.width = "100%";
         canvasWrapper.style.height = "100%";
-        canvasWrapper.style.cursor = "none"; // Hide default OS cursor
+        canvasWrapper.style.cursor = "none";
 
         const imgCanvas = document.createElement("canvas");
-        const maskCanvas = document.createElement("canvas");   // EDITABLE MASK CANVAS
-        const cursorCanvas = document.createElement("canvas"); // BRUSH RING CANVAS
+        const maskCanvas = document.createElement("canvas");
+        const cursorCanvas = document.createElement("canvas");
 
         [imgCanvas, maskCanvas, cursorCanvas].forEach(c => {
-            c.width = 400; c.height = 400;
+            c.width = 460; c.height = 460;
             c.style.position = "absolute"; c.style.left = "0"; c.style.top = "0";
             c.style.width = "100%"; c.style.height = "100%";
             canvasWrapper.appendChild(c);
@@ -118,30 +203,49 @@ app.registerExtension({
 
         container.appendChild(viewToolbar);
         container.appendChild(drawToolbar);
+        container.appendChild(controlToolbar);
         container.appendChild(slidersDiv);
         container.appendChild(canvasViewport);
 
         node.addDOMWidget("mask_editor_layers", "canvas", container);
 
-        // Suppress raw text widget from drawing on LiteGraph node UI
         let hiddenWidget = node.widgets?.find(w => w.name === "edited_mask_data");
         if (!hiddenWidget) {
             hiddenWidget = node.addWidget("text", "edited_mask_data", "", () => {}, { multiline: false });
         }
         hiddenWidget.type = "hidden";
-        hiddenWidget.draw = function() {};                       // Zero rendering
-        hiddenWidget.computeSize = function() { return [0, -10]; }; // Zero height
+        hiddenWidget.draw = function() {};                       
+        hiddenWidget.computeSize = function() { return [0, -10]; };
 
-        // Contexts
+        // Contexts & State
         const imgCtx = imgCanvas.getContext("2d");
         const maskCtx = maskCanvas.getContext("2d");
         const cursorCtx = cursorCanvas.getContext("2d");
 
         let isDrawing = false;
-        let brushMode = "add";    // "add" or "remove"
-        let viewMode = "overlay"; // "overlay" or "bw"
+        let brushMode = "add";
+        let viewMode = "overlay";
+        let latestMaskImgObj = null;
 
-        // History Stack Engine
+        function hexToRgba(hex, alpha) {
+            let c = hex.replace('#', '');
+            if (c.length === 3) c = c.split('').map(x => x + x).join('');
+            const r = parseInt(c.substring(0, 2), 16) || 255;
+            const g = parseInt(c.substring(2, 4), 16) || 40;
+            const b = parseInt(c.substring(4, 6), 16) || 40;
+            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+        }
+
+        function updateLockUI() {
+            if (isLocked) {
+                btnLock.innerText = "🔒 Mask Locked";
+                btnLock.style.backgroundColor = "#10b981";
+            } else {
+                btnLock.innerText = "🔓 Unlocked";
+                btnLock.style.backgroundColor = "#e76f51";
+            }
+        }
+
         function pushUndo() {
             if (undoStack.length >= MAX_HISTORY) undoStack.shift();
             undoStack.push(maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height));
@@ -153,6 +257,7 @@ app.registerExtension({
                 redoStack.push(maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height));
                 const state = undoStack.pop();
                 maskCtx.putImageData(state, 0, 0);
+                saveMask();
             }
         }
 
@@ -161,10 +266,10 @@ app.registerExtension({
                 undoStack.push(maskCtx.getImageData(0, 0, maskCanvas.width, maskCanvas.height));
                 const state = redoStack.pop();
                 maskCtx.putImageData(state, 0, 0);
+                saveMask();
             }
         }
 
-        // View Mode Toggle
         function updateViewMode() {
             const alpha = opacityControl.input.value / 100.0;
             if (viewMode === "overlay") {
@@ -178,7 +283,6 @@ app.registerExtension({
             }
         }
 
-        // Export Mask State ONLY when clicking "Send & Queue Inpaint"
         function saveMask() {
             const exportCanvas = document.createElement("canvas");
             exportCanvas.width = maskCanvas.width;
@@ -209,9 +313,13 @@ app.registerExtension({
             node.setDirtyCanvas(true, true);
         }
 
-        // Resizing to Match Input Aspect Ratio
+        node.onSerialize = function() {
+            if (isLocked) saveMask();
+        };
+
+        // ACCURATE ASPECT RATIO RESIZING WITH FULL TOOLBAR PADDING
         function adjustAspectRatio(nativeW, nativeH) {
-            const maxW = 400;
+            const maxW = 460;
             const aspect = nativeW / nativeH;
             const displayH = Math.round(maxW / aspect);
 
@@ -222,11 +330,13 @@ app.registerExtension({
 
             canvasViewport.style.width = `${maxW}px`;
             canvasViewport.style.height = `${displayH}px`;
-            node.size = [440, displayH + 160];
+            
+            // Added +220px to account for header, 3 toolbars, sliders, and margins
+            node.size = [500, displayH + 220];
         }
 
-        // Render Detector Mask
         function renderDetectorMask(maskImg) {
+            if (!maskImg) return;
             const w = maskCanvas.width;
             const h = maskCanvas.height;
             maskCtx.clearRect(0, 0, w, h);
@@ -239,22 +349,28 @@ app.registerExtension({
             const imgData = tempCtx.getImageData(0, 0, w, h);
             const data = imgData.data;
 
+            // Extract RGB from chosen color hex
+            const activeRgb = hexToRgba(currentColor, 1.0);
+            const rgbMatch = activeRgb.match(/\d+/g);
+            const rVal = rgbMatch ? parseInt(rgbMatch[0]) : 255;
+            const gVal = rgbMatch ? parseInt(rgbMatch[1]) : 40;
+            const bVal = rgbMatch ? parseInt(rgbMatch[2]) : 40;
+
             for (let i = 0; i < data.length; i += 4) {
                 const val = data[i];
                 if (val > 128) {
-                    data[i]     = 255; // Red
-                    data[i + 1] = 40;  // Green
-                    data[i + 2] = 40;  // Blue
-                    data[i + 3] = 255; // Solid Alpha
+                    data[i]     = rVal;
+                    data[i + 1] = gVal;
+                    data[i + 2] = bVal;
+                    data[i + 3] = 255;
                 } else {
                     data[i] = 0; data[i + 1] = 0; data[i + 2] = 0;
-                    data[i + 3] = 0; // Transparent
+                    data[i + 3] = 0;
                 }
             }
             maskCtx.putImageData(imgData, 0, 0);
         }
 
-        // ALWAYS load fresh detector mask on every execution run
         function loadLayers(imgUrl, maskUrl) {
             if (!imgUrl || !maskUrl) return;
 
@@ -273,28 +389,31 @@ app.registerExtension({
             });
 
             Promise.all([imgPromise, maskPromise]).then(([img, maskImg]) => {
+                latestMaskImgObj = maskImg;
                 adjustAspectRatio(img.naturalWidth, img.naturalHeight);
 
-                // Render Background Crop
                 imgCtx.clearRect(0, 0, imgCanvas.width, imgCanvas.height);
                 imgCtx.drawImage(img, 0, 0, imgCanvas.width, imgCanvas.height);
 
-                // ALWAYS render fresh detector mask & clear widget cache
-                if (hiddenWidget) hiddenWidget.value = "";
-                renderDetectorMask(maskImg);
-                undoStack.length = 0;
-                redoStack.length = 0;
+                if (!isLocked) {
+                    if (hiddenWidget) hiddenWidget.value = "";
+                    renderDetectorMask(maskImg);
+                    undoStack.length = 0;
+                    redoStack.length = 0;
+                }
 
                 updateViewMode();
             });
         }
 
-        // Execution Handler
         function handleExecutionData(data) {
             if (data && data.length >= 2) {
                 node.latestImgUrl = api.apiURL(`/view?filename=${data[0].filename}&type=${data[0].type}&subfolder=${data[0].subfolder}`);
                 node.latestMaskUrl = api.apiURL(`/view?filename=${data[1].filename}&type=${data[1].type}&subfolder=${data[1].subfolder}`);
-                loadLayers(node.latestImgUrl, node.latestMaskUrl);
+                
+                if (!isLocked) {
+                    loadLayers(node.latestImgUrl, node.latestMaskUrl);
+                }
             }
         }
 
@@ -311,7 +430,7 @@ app.registerExtension({
         });
 
         // -------------------------------------------------------------
-        // DIRECT 1:1 DRAWING ENGINE & CURSOR INDICATOR
+        // DYNAMIC PREVIEW CURSOR ENGINE
         // -------------------------------------------------------------
         function getPos(e) {
             const rect = maskCanvas.getBoundingClientRect();
@@ -332,15 +451,12 @@ app.registerExtension({
 
             cursorCtx.beginPath();
             cursorCtx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
-            cursorCtx.strokeStyle = "#FFFFFF";
-            cursorCtx.lineWidth = 2 * (maskCanvas.width / canvasViewport.clientWidth);
-            cursorCtx.stroke();
-
-            cursorCtx.beginPath();
-            cursorCtx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
-            cursorCtx.strokeStyle = "#000000";
-            cursorCtx.lineWidth = 1 * (maskCanvas.width / canvasViewport.clientWidth);
-            cursorCtx.stroke();
+            if (brushMode === "add") {
+                cursorCtx.fillStyle = hexToRgba(currentColor, 0.4);
+            } else {
+                cursorCtx.fillStyle = "rgba(0, 229, 255, 0.4)";
+            }
+            cursorCtx.fill();
         }
 
         function draw(e) {
@@ -356,7 +472,7 @@ app.registerExtension({
 
             if (brushMode === "add") {
                 maskCtx.globalCompositeOperation = "source-over";
-                maskCtx.strokeStyle = "#ff2828";
+                maskCtx.strokeStyle = currentColor;
                 maskCtx.lineTo(pos.x, pos.y);
                 maskCtx.stroke();
                 maskCtx.beginPath();
@@ -377,6 +493,12 @@ app.registerExtension({
         canvasWrapper.addEventListener("mousedown", (e) => {
             pushUndo();
             isDrawing = true;
+            
+            if (!isLocked) {
+                isLocked = true;
+                updateLockUI();
+            }
+
             maskCtx.beginPath();
             draw(e);
         });
@@ -386,6 +508,7 @@ app.registerExtension({
             if (isDrawing) {
                 isDrawing = false;
                 maskCtx.beginPath();
+                saveMask();
             }
         });
 
@@ -396,24 +519,23 @@ app.registerExtension({
         btnAdd.onclick = () => { brushMode = "add"; setActive(btnAdd, [btnRemove]); };
         btnRemove.onclick = () => { brushMode = "remove"; setActive(btnRemove, [btnAdd]); };
 
-        btnSend.onclick = () => {
-            saveMask();
-            btnSend.style.backgroundColor = "#059669"; // Darker green while active
-            btnSend.innerText = "⚡ Queueing Inpaint...";
-            app.queuePrompt();
-            setTimeout(() => {
-                btnSend.style.backgroundColor = "#10b981"; // Resets back to emerald green
-                btnSend.innerText = "🚀 Send & Queue Inpaint";
-            }, 1500);
+        btnLock.onclick = () => {
+            isLocked = !isLocked;
+            updateLockUI();
+            if (isLocked) saveMask();
+        };
+
+        btnSync.onclick = () => {
+            isLocked = false;
+            updateLockUI();
+            if (hiddenWidget) hiddenWidget.value = "";
+            if (node.latestMaskUrl && node.latestImgUrl) {
+                loadLayers(node.latestImgUrl, node.latestMaskUrl);
+            }
         };
 
         btnUndo.onclick = undo;
         btnRedo.onclick = redo;
-
-        btnReset.onclick = () => {
-            if (hiddenWidget) hiddenWidget.value = "";
-            if (node.latestMaskUrl) loadLayers(node.latestImgUrl, node.latestMaskUrl);
-        };
 
         opacityControl.input.oninput = updateViewMode;
 
@@ -478,6 +600,7 @@ app.registerExtension({
             return { container: div, input: input, numInput: numInput };
         }
 
+        updateLockUI();
         updateViewMode();
     }
 });

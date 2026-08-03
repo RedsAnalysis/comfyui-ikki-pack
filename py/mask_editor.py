@@ -21,7 +21,7 @@ if not logger.handlers:
 class IkkiMaskEditor:
     """
     Node 3: Single-Layer Visual Mask Editor.
-    Decodes transparent-background PNG from frontend canvas into PyTorch binary MASK tensor.
+    Works as a standalone Mask Creator (image input only) OR an Inpaint Mask Editor (image + detector mask).
     """
     
     OUTPUT_NODE = True
@@ -31,9 +31,9 @@ class IkkiMaskEditor:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "mask": ("MASK",),
             },
             "optional": {
+                "mask": ("MASK",),
                 "crop_data": ("CROP_DATA",),
                 "edited_mask_data": ("STRING", {"default": "", "multiline": False}),
             }
@@ -44,15 +44,23 @@ class IkkiMaskEditor:
     FUNCTION = "edit_mask"
     CATEGORY = "Ikki/Detailer Pipeline"
 
-    def edit_mask(self, image, mask, crop_data=None, edited_mask_data=""):
+    def edit_mask(self, image, mask=None, crop_data=None, edited_mask_data=""):
         logger.info("--- Starting Visual Mask Editor Execution ---")
 
-        base_mask = mask.cpu().clone()
+        # 1. Handle missing mask input: Create blank mask matching image dimensions
+        if mask is None:
+            logger.info("No input mask provided. Initializing blank mask for drawing from scratch.")
+            b, h, w = image.shape[0], image.shape[1], image.shape[2]
+            base_mask = torch.zeros((b, h, w), dtype=torch.float32, device="cpu")
+        else:
+            base_mask = mask.cpu().clone()
+
         if base_mask.ndim == 2:
             base_mask = base_mask.unsqueeze(0)
 
         out_mask = base_mask
 
+        # 2. Decode manual canvas edits if present
         if edited_mask_data and edited_mask_data.startswith("data:image/png;base64,"):
             try:
                 logger.info("Custom mask canvas data received. Decoding...")
@@ -72,11 +80,12 @@ class IkkiMaskEditor:
                 out_mask = torch.from_numpy(binary).unsqueeze(0)
                 logger.info(f"Edited mask decoded successfully. Mask mean coverage: {out_mask.mean().item():.2f}")
             except Exception as e:
-                logger.exception("Failed to decode mask data! Falling back to base detector mask.")
+                logger.exception("Failed to decode mask data! Falling back to base mask.")
                 out_mask = base_mask
         else:
-            logger.info("No manual canvas edits found. Using base detector mask.")
+            logger.info("No manual canvas edits found. Using base mask.")
 
+        # 3. Save temporary images for JS frontend UI
         temp_dir = folder_paths.get_temp_directory()
         rand_prefix = f"ikki_editor_{random.randint(100000, 999999)}"
 
